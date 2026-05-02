@@ -5,20 +5,18 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    
     <uses-permission android:name="android.permission.VIBRATE" />
-
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:label="AWB Scanner"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@android:drawable/sym_def_app_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar"> 
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -33,7 +31,7 @@
             android:name=".FloatingScannerService"
             android:enabled="true"
             android:exported="false" />
-
     </application>
 
 </manifest>
+
