@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AWB Scanner App</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+    <style>
+        /* Reset body jate kono extra scroll na ashe */
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: black; }
+
+        /* Scanner-er video full screen kora */
+        #reader { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
+        #reader video { object-fit: cover; width: 100%; height: 100%; }
+
+        /* HUD (Heads Up Display) - Scanner-er charpasher border ebong animation */
+        .hud-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 75%;
+            height: 40%;
+            z-index: 10;
+            pointer-events: none; /* Touch event pass korar jonno */
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6); /* Background ektu dark korar jonno */
+        }
+
+        /* 4 corner-er border */
+        .corner-tl, .corner-tr, .corner-bl, .corner-br {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-color: #00ff00;
+            border-style: solid;
+        }
+        .corner-tl { top: 0; left: 0; border-width: 4px 0 0 4px; }
+        .corner-tr { top: 0; right: 0; border-width: 4px 4px 0 0; }
+        .corner-bl { bottom: 0; left: 0; border-width: 0 0 4px 4px; }
+        .corner-br { bottom: 0; right: 0; border-width: 0 4px 4px 0; }
+
+        /* Niche-upore namar animation line */
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #00ff00;
+            box-shadow: 0 0 10px 2px rgba(0, 255, 0, 0.7);
+            animation: scan-move 2s infinite linear;
+        }
+
+        @keyframes scan-move {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        /* Floating (PIP) Mode er styles */
+        body.floating-mode .hud-container { width: 90%; height: 90%; box-shadow: none; }
+        body.floating-mode .corner-tl, body.floating-mode .corner-tr, 
+        body.floating-mode .corner-bl, body.floating-mode .corner-br { width: 20px; height: 20px; border-width: 2px; }
+    </style>
+</head>
+<body class="text-white font-sans">
+
+    <div id="reader"></div>
+
+    <div class="hud-container" id="scanner-hud">
+        <div class="corner-tl"></div>
+        <div class="corner-tr"></div>
+        <div class="corner-bl"></div>
+        <div class="corner-br"></div>
+        <div class="scan-line"></div>
+    </div>
+
+    <div id="standard-ui" class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-black/80 to-transparent z-20 flex flex-col items-center">
+        
+        <div id="last-scan" class="mb-3 text-green-400 font-bold text-lg text-center bg-gray-900/80 border border-green-500/50 px-4 py-2 rounded-lg w-full truncate shadow-lg">
+            Notun AWB Scan Korun...
+        </div>
+        
+        <button onclick="startPIPMode()" class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg mb-3 transition-colors flex items-center justify-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+            PIP Mode Suru Korun
+        </button>
+        
+        <div class="w-full h-32 overflow-y-auto bg-gray-800/60 rounded-xl p-3 border border-gray-700">
+            <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider border-b border-gray-600 pb-2 mb-2">Ager Scan Gulo:</p>
+            <ul id="history-list" class="flex flex-col gap-2">
+                </ul>
+        </div>
+    </div>
+
+    <div id="floating-ui" class="absolute top-2 right-2 z-30 hidden">
+        <button onclick="stopPIPMode()" class="bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center font-bold border-2 border-white/20">
+            ✕
+        </button>
+    </div>
+
+    <script>
+        // URL theke check kora - amra ki ekhon PIP/Floating mode-e achi?
+        const urlParams = new URLSearchParams(window.location.search);
+        const isFloating = urlParams.get('mode') === 'floating';
+
+        const standardUI = document.getElementById('standard-ui');
+        const floatingUI = document.getElementById('floating-ui');
+
+        // Jodi floating mode hoy, tahole UI change kora
+        if (isFloating) {
+            document.body.classList.add('floating-mode');
+            standardUI.classList.add('hidden');
+            floatingUI.classList.remove('hidden');
+        }
+
+        // HTML5 QRCode Scanner setup
+        const html5QrCode = new Html5Qrcode("reader");
+        
+        // FPS 30 set kora holo instant scan er jonno
+        const scannerConfig = { 
+            fps: 30, 
+            qrbox: isFloating ? { width: 120, height: 120 } : { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            disableFlip: false
+        };
+
+        // Scan success hole ei function ta call hobe
+        function onScanSuccess(decodedText, decodedResult) {
+            // 1. Android Native Bridge Call kora
+            if (window.AndroidInterface) {
+                window.AndroidInterface.copyToClipboardNative(decodedText);
+                window.AndroidInterface.playBeepSound();
+                window.AndroidInterface.vibratePhone();
+            } else {
+                // Fallback: Jodi browser-e ba PC te run hoy
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(decodedText).catch(err => copyFallback(decodedText));
+                } else {
+                    copyFallback(decodedText);
+                }
+            }
+
+            // 2. UI Update kora (sudhu jodi standard mode-e thaki)
+            if (!isFloating) {
+                const lastScanDiv = document.getElementById('last-scan');
+                lastScanDiv.innerText = "✓ Copied: " + decodedText;
+                lastScanDiv.classList.add('bg-green-900/80'); // Success color
+                
+                setTimeout(() => {
+                    lastScanDiv.classList.remove('bg-green-900/80');
+                }, 500);
+
+                // History list e add kora
+                const li = document.createElement('li');
+                li.className = "text-sm text-gray-200 bg-gray-700/50 p-2 rounded flex items-center justify-between";
+                li.innerHTML = `<span>${decodedText}</span> <span class="text-xs text-gray-400">${new Date().toLocaleTimeString()}</span>`;
+                
+                const historyList = document.getElementById('history-list');
+                historyList.prepend(li); // Sobar upore notun ta add korbe
+            }
+            
+            // 3. Eke sathe onek bar same barcode scan howa thekate ektu pause kora
+            html5QrCode.pause(true);
+            setTimeout(() => {
+                html5QrCode.resume();
+            }, 1500); // 1.5 second por abar scan korbe
+        }
+
+        // Old browser-er jonno fallback copy method
+        function copyFallback(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {}
+            document.body.removeChild(textArea);
+        }
+
+        // Camera Start Kora (Pichoner camera use korbe)
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            scannerConfig, 
+            onScanSuccess
+        ).catch(err => {
+            console.error("Camera chalute problem hoche: ", err);
+            if (!isFloating) {
+                document.getElementById('last-scan').innerText = "Camera Error! Permission check korun.";
+            }
+        });
+
+        // PIP mode on korar button action
+        function startPIPMode() {
+            if (window.AndroidInterface && window.AndroidInterface.startFloatingService) {
+                window.AndroidInterface.startFloatingService();
+            } else {
+                alert("PIP mode sudhu Android App er bhetor kaj korbe!");
+            }
+        }
+
+        // PIP mode theke beriye asar button action
+        function stopPIPMode() {
+            if (window.AndroidInterface && window.AndroidInterface.stopFloatingService) {
+                window.AndroidInterface.stopFloatingService();
+            }
+        }
+    </script>
+</body>
+</html>
