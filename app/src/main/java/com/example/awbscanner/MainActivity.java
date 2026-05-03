@@ -47,8 +47,6 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
-        
-        // File permissions for camera
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setAllowFileAccessFromFileURLs(true);
@@ -75,6 +73,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (webView != null) {
+            webView.onPause();
+            webView.destroy();
+        }
+    }
+
     public class WebAppInterface {
         Context mContext;
 
@@ -91,7 +98,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             Intent serviceIntent = new Intent(MainActivity.this, FloatingScannerService.class);
-            startService(serviceIntent);
+            // IMPORTANT: Background camera access er jonno foreground service call korte hobe
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(mContext, serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
             finish(); 
         }
 
