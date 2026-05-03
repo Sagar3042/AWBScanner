@@ -36,14 +36,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Full screen WebView toiri kora
         webView = new WebView(this);
         setContentView(webView);
 
-        // WebView configuration setup kora
         setupWebView();
-
-        // App open holei prothome Camera permission check kora
         checkCameraPermission();
     }
 
@@ -51,26 +47,25 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
-        // Camera jate user er click charai auto start hote pare
+        
+        // File permissions for camera
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowContentAccess(true);
+        webSettings.setAllowFileAccessFromFileURLs(true);
+        webSettings.setAllowUniversalAccessFromFileURLs(true);
         webSettings.setMediaPlaybackRequiresUserGesture(false); 
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                // HTML5 theke asha camera permission request auto-grant kora
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     request.grant(request.getResources());
                 }
             }
         });
 
-        // ==========================================
-        // JS THEKE ANDROID E JOGAJOG ER BRIDGE
-        // ==========================================
         webView.addJavascriptInterface(new WebAppInterface(this), "AndroidInterface");
-        
-        // Assets folder theke index.html load kora
         webView.loadUrl("file:///android_asset/index.html");
     }
 
@@ -80,35 +75,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ==========================================
-    // JAVASCRIPT INTERFACE CLASS
-    // HTML er JS file theke ei method gulo call hobe
-    // ==========================================
     public class WebAppInterface {
         Context mContext;
 
-        WebAppInterface(Context c) { 
-            mContext = c; 
-        }
+        WebAppInterface(Context c) { mContext = c; }
 
         @JavascriptInterface
         public void startFloatingService() {
-            // PIP mode e jawar age check kora je 'Draw over other apps' permission ache kina
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(mContext)) {
-                // Permission na thakle settings page e niye jabe
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
                 startActivityForResult(intent, OVERLAY_PERMISSION_CODE);
-                
-                // UI thread e Toast dekhano
                 runOnUiThread(() -> Toast.makeText(mContext, "Doya kore 'Allow display over other apps' on korun", Toast.LENGTH_LONG).show());
                 return;
             }
 
-            // Permission thakle Service start kore ei main activity bondho kore dewa
             Intent serviceIntent = new Intent(MainActivity.this, FloatingScannerService.class);
             startService(serviceIntent);
-            finish(); // Activity close hobe, kintu floating service cholte thakbe
+            finish(); 
         }
 
         @JavascriptInterface
@@ -125,27 +109,20 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void playBeepSound() {
-            // Scan success hole native beep sound play kora
             ToneGenerator toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
             toneGen.startTone(ToneGenerator.TONE_CDMA_PIP, 150); 
         }
 
         @JavascriptInterface
         public void copyToClipboardNative(String text) {
-            // Native Android Clipboard Manager bebohar kore text copy kora
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clip = ClipData.newPlainText("AWB Scan", text);
-            if (clipboard != null) {
-                clipboard.setPrimaryClip(clip);
-            }
-            
-            // Toast msg dekhano jate user bujhte pare copy hoyeche
+            if (clipboard != null) clipboard.setPrimaryClip(clip);
             runOnUiThread(() -> Toast.makeText(mContext, "Copied: " + text, Toast.LENGTH_SHORT).show());
         }
         
         @JavascriptInterface
-        public void stopFloatingService() {
-            // Ekhane kichu korar dorkar nei, karon ei interface ta Main Activity te cholche (standard mode)
-        }
+        public void stopFloatingService() { }
     }
 }
+

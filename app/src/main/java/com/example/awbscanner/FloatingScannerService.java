@@ -34,9 +34,7 @@ public class FloatingScannerService extends Service {
 
     @Nullable
     @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    public IBinder onBind(Intent intent) { return null; }
 
     @Override
     public void onCreate() {
@@ -45,10 +43,8 @@ public class FloatingScannerService extends Service {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         floatingWebView = new WebView(this);
 
-        // PIP Window er size (160dp x 160dp)
         int sizePx = (int) (160 * getResources().getDisplayMetrics().density);
         
-        // Android version onujayi Overlay type set kora
         int layoutFlag;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             layoutFlag = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -56,25 +52,22 @@ public class FloatingScannerService extends Service {
             layoutFlag = WindowManager.LayoutParams.TYPE_PHONE;
         }
 
-        // FLAG_NOT_FOCUSABLE khub e important, noile pichoner app e touch ba keyboard kaj korbe na
+        // IMPORTANT: FLAG_HARDWARE_ACCELERATED lagbei, noile camera black screen hoye jabe
         params = new WindowManager.LayoutParams(
                 sizePx,
                 sizePx,
                 layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | 
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED |
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
 
-        // Screen er bottom-right e thakbe prothome
         params.gravity = Gravity.BOTTOM | Gravity.END;
-        params.x = 20; // margin
+        params.x = 20;
         params.y = 100;
 
         setupWebView();
-        
-        // Screen e WebView ti add kora
         windowManager.addView(floatingWebView, params);
-        
-        // Drag korar jonno touch listener
         setupDragListener();
     }
 
@@ -82,6 +75,12 @@ public class FloatingScannerService extends Service {
         WebSettings webSettings = floatingWebView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
+        
+        // IMPORTANT: Ei permission gulo file theke camera chalate sahajyo korbe
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowContentAccess(true);
+        webSettings.setAllowFileAccessFromFileURLs(true);
+        webSettings.setAllowUniversalAccessFromFileURLs(true);
         webSettings.setMediaPlaybackRequiresUserGesture(false);
 
         floatingWebView.setWebViewClient(new WebViewClient());
@@ -94,10 +93,7 @@ public class FloatingScannerService extends Service {
             }
         });
 
-        // Floating Interface inject kora
         floatingWebView.addJavascriptInterface(new FloatingWebAppInterface(), "AndroidInterface");
-        
-        // URL e '?mode=floating' jure dewa jate HTML bujhte pare je ekhon PIP mode e ache
         floatingWebView.loadUrl("file:///android_asset/index.html?mode=floating");
     }
 
@@ -114,11 +110,9 @@ public class FloatingScannerService extends Service {
                         initialY = params.y;
                         initialTouchX = event.getRawX();
                         initialTouchY = event.getRawY();
-                        return false; // False return korle WebView er vitorer click (jemon katar button) kaj korbe
-                        
+                        return false; 
                     case MotionEvent.ACTION_MOVE:
-                        // Gravity END(right) tai x er math ektu onnorokom
-                        params.x = initialX - (int) (event.getRawX() - initialTouchX); 
+                        params.x = initialX - (int) (event.getRawX() - initialTouchX);
                         params.y = initialY - (int) (event.getRawY() - initialTouchY);
                         windowManager.updateViewLayout(floatingWebView, params);
                         return true;
@@ -131,26 +125,18 @@ public class FloatingScannerService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        // Service bondho hole screen theke view remove kora
         if (floatingWebView != null) {
             windowManager.removeView(floatingWebView);
             floatingWebView.destroy();
         }
     }
 
-    // ==========================================
-    // FLOATING MODE ER JAVASCRIPT BRIDGE
-    // ==========================================
     public class FloatingWebAppInterface {
-        
         @JavascriptInterface
         public void stopFloatingService() {
-            // Background theke abar Main Activity (Full screen) open kora
             Intent intent = new Intent(FloatingScannerService.this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-            
-            // Nijeke bondho kore dewa
             stopSelf(); 
         }
 
@@ -175,16 +161,13 @@ public class FloatingScannerService extends Service {
         @JavascriptInterface
         public void copyToClipboardNative(String text) {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("AWB Scan Background", text);
-            if (clipboard != null) {
-                clipboard.setPrimaryClip(clip);
-            }
-            Toast.makeText(FloatingScannerService.this, "Copied in Background: " + text, Toast.LENGTH_SHORT).show();
+            ClipData clip = ClipData.newPlainText("AWB Scan", text);
+            if (clipboard != null) clipboard.setPrimaryClip(clip);
+            Toast.makeText(FloatingScannerService.this, "Copied in PIP Mode: " + text, Toast.LENGTH_SHORT).show();
         }
         
         @JavascriptInterface
-        public void startFloatingService() {
-            // Already floating mode e achi, tai ekhane kichu korar dorkar nei
-        }
+        public void startFloatingService() { }
     }
 }
+

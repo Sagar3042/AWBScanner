@@ -3,63 +3,147 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AWB Scanner App</title>
+    <title>AWB Pro Scanner</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: black; }
-        #reader { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
-        #reader video { object-fit: cover; width: 100%; height: 100%; }
-        .hud-container {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 75%; height: 40%; z-index: 10; pointer-events: none;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        
+        body {
+            background-color: #000;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            color: white;
         }
-        .corner-tl, .corner-tr, .corner-bl, .corner-br {
-            position: absolute; width: 40px; height: 40px; border-color: #00ff00; border-style: solid;
+
+        /* Full-screen Camera Container */
+        #reader {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
         }
-        .corner-tl { top: 0; left: 0; border-width: 4px 0 0 4px; }
-        .corner-tr { top: 0; right: 0; border-width: 4px 4px 0 0; }
-        .corner-bl { bottom: 0; left: 0; border-width: 0 0 4px 4px; }
-        .corner-br { bottom: 0; right: 0; border-width: 0 4px 4px 0; }
+
+        #reader video {
+            object-fit: cover;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Glassmorphism Scan Frame */
+        .scan-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, transparent 130px, rgba(0, 0, 0, 0.7) 130px);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .scan-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 260px;
+            height: 260px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 32px;
+            z-index: 10;
+        }
+
+        /* Neon Corners */
+        .corner {
+            position: absolute;
+            width: 45px;
+            height: 45px;
+            border: 4px solid #3b82f6;
+            border-radius: 12px;
+            filter: drop-shadow(0 0 8px #3b82f6);
+        }
+        .tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+        .tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; }
+        .bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; }
+        .br { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+
+        /* Animated Scanning Line */
         .scan-line {
-            position: absolute; top: 0; left: 0; width: 100%; height: 2px;
-            background-color: #00ff00; box-shadow: 0 0 10px 2px rgba(0, 255, 0, 0.7);
-            animation: scan-move 2s infinite linear;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(to right, transparent, #3b82f6, transparent);
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: scan-move 2.5s infinite ease-in-out;
+            box-shadow: 0 0 20px 2px rgba(59, 130, 246, 0.8);
         }
-        @keyframes scan-move { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
-        body.floating-mode .hud-container { width: 90%; height: 90%; box-shadow: none; }
-        body.floating-mode .corner-tl, body.floating-mode .corner-tr, 
-        body.floating-mode .corner-bl, body.floating-mode .corner-br { width: 20px; height: 20px; border-width: 2px; }
+
+        @keyframes scan-move {
+            0%, 100% { top: 0; }
+            50% { top: 100%; }
+        }
+
+        /* PIP Mode Layout Adjustments */
+        body.floating-mode .scan-frame {
+            width: 140px;
+            height: 140px;
+            border-radius: 16px;
+        }
+        body.floating-mode .scan-overlay {
+            background: none;
+        }
+
+        /* Custom Scrollbar for History */
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 10px;
+        }
     </style>
 </head>
-<body class="text-white font-sans">
+<body>
 
     <div id="reader"></div>
 
-    <div class="hud-container" id="scanner-hud">
-        <div class="corner-tl"></div><div class="corner-tr"></div>
-        <div class="corner-bl"></div><div class="corner-br"></div>
+    <div class="scan-overlay" id="overlay-darken"></div>
+    <div class="scan-frame">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
         <div class="scan-line"></div>
     </div>
 
-    <div id="standard-ui" class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-black/80 to-transparent z-20 flex flex-col items-center">
-        <div id="last-scan" class="mb-3 text-green-400 font-bold text-lg text-center bg-gray-900/80 border border-green-500/50 px-4 py-2 rounded-lg w-full truncate shadow-lg">
-            Notun AWB Scan Korun...
+    <div id="standard-ui" class="fixed bottom-0 left-0 w-full p-6 bg-black/40 backdrop-blur-2xl border-t border-white/10 rounded-t-[40px] z-20 flex flex-col items-center">
+        
+        <div id="last-scan" class="mb-4 text-blue-400 font-semibold text-center bg-blue-500/10 border border-blue-500/20 px-6 py-3 rounded-2xl w-full truncate shadow-xl">
+            Awaiting first scan...
         </div>
-        <button onclick="startPIPMode()" class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg mb-3 transition-colors">
-            PIP Mode Suru Korun
+        
+        <button onclick="triggerPIP()" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-3 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            Floating Mode (PIP)
         </button>
-        <div class="w-full h-32 overflow-y-auto bg-gray-800/60 rounded-xl p-3 border border-gray-700">
-            <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider border-b border-gray-600 pb-2 mb-2">Ager Scan Gulo:</p>
-            <ul id="history-list" class="flex flex-col gap-2"></ul>
+        
+        <div class="w-full">
+            <div class="flex justify-between items-center mb-2 px-1">
+                <span class="text-gray-400 text-xs font-bold uppercase tracking-widest">Recent Scans</span>
+                <span id="history-count" class="text-blue-400 text-xs font-bold bg-blue-500/10 px-2 py-0.5 rounded">0</span>
+            </div>
+            <div class="h-28 overflow-y-auto custom-scroll space-y-2" id="history-list">
+                </div>
         </div>
     </div>
 
-    <div id="floating-ui" class="absolute top-2 right-2 z-30 hidden">
-        <button onclick="stopPIPMode()" class="bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center font-bold border-2 border-white/20">
+    <div id="floating-ui" class="fixed top-2 right-2 z-50 hidden">
+        <button onclick="exitPIP()" class="bg-red-500/90 hover:bg-red-600 text-white w-10 h-10 rounded-full shadow-2xl flex items-center justify-center font-bold border-2 border-white/20 backdrop-blur-md">
             ✕
         </button>
     </div>
@@ -67,55 +151,91 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const isFloating = urlParams.get('mode') === 'floating';
-        const standardUI = document.getElementById('standard-ui');
-        const floatingUI = document.getElementById('floating-ui');
+        const historyData = [];
 
+        // UI Mode Setup
         if (isFloating) {
             document.body.classList.add('floating-mode');
-            standardUI.classList.add('hidden');
-            floatingUI.classList.remove('hidden');
+            document.getElementById('standard-ui').classList.add('hidden');
+            document.getElementById('overlay-darken').classList.add('hidden');
+            document.getElementById('floating-ui').classList.remove('hidden');
         }
 
+        // Camera Engine Optimization
         const html5QrCode = new Html5Qrcode("reader");
-        const scannerConfig = { 
-            fps: 30, 
-            qrbox: isFloating ? { width: 120, height: 120 } : { width: 250, height: 250 },
-            aspectRatio: 1.0, disableFlip: false
+        const qrConfig = { 
+            fps: 30, // 30 FPS for instant scanning
+            qrbox: isFloating ? { width: 140, height: 140 } : { width: 260, height: 260 },
+            aspectRatio: 1.0,
+            videoConstraints: {
+                facingMode: "environment",
+                focusMode: "continuous",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
         };
 
-        function onScanSuccess(decodedText, decodedResult) {
+        function onScanSuccess(decodedText) {
+            // 1. Native Bridge Actions
             if (window.AndroidInterface) {
-                window.AndroidInterface.copyToClipboardNative(decodedText);
-                window.AndroidInterface.playBeepSound();
-                window.AndroidInterface.vibratePhone();
+                AndroidInterface.copyToClipboardNative(decodedText);
+                AndroidInterface.playBeepSound();
+                AndroidInterface.vibratePhone();
             }
 
+            // 2. UI Updates (If not in floating mode)
             if (!isFloating) {
-                const lastScanDiv = document.getElementById('last-scan');
-                lastScanDiv.innerText = "✓ Copied: " + decodedText;
-                lastScanDiv.classList.add('bg-green-900/80');
-                setTimeout(() => { lastScanDiv.classList.remove('bg-green-900/80'); }, 500);
-
-                const li = document.createElement('li');
-                li.className = "text-sm text-gray-200 bg-gray-700/50 p-2 rounded flex items-center justify-between";
-                li.innerHTML = `<span>${decodedText}</span> <span class="text-xs text-gray-400">${new Date().toLocaleTimeString()}</span>`;
-                document.getElementById('history-list').prepend(li);
+                updateUI(decodedText);
             }
             
+            // 3. Pause for duplicate scans
             html5QrCode.pause(true);
-            setTimeout(() => { html5QrCode.resume(); }, 1500);
+            setTimeout(() => html5QrCode.resume(), 1800);
         }
 
-        html5QrCode.start({ facingMode: "environment" }, scannerConfig, onScanSuccess)
-        .catch(err => { console.error(err); });
+        function updateUI(text) {
+            const lastScan = document.getElementById('last-scan');
+            lastScan.innerText = "✓ Copied: " + text;
+            lastScan.classList.replace('text-blue-400', 'text-green-400');
+            lastScan.classList.add('scale-105');
+            
+            setTimeout(() => {
+                lastScan.classList.replace('text-green-400', 'text-blue-400');
+                lastScan.classList.remove('scale-105');
+            }, 800);
 
-        function startPIPMode() {
-            if (window.AndroidInterface) window.AndroidInterface.startFloatingService();
+            // History Update
+            historyData.unshift(text);
+            const list = document.getElementById('history-list');
+            const item = document.createElement('div');
+            item.className = "bg-white/5 border border-white/10 p-3 rounded-xl flex items-center justify-between text-sm animate-fade-in";
+            item.innerHTML = `<span class="truncate pr-4">${text}</span><span class="text-gray-500 text-[10px]">${new Date().toLocaleTimeString()}</span>`;
+            list.prepend(item);
+            document.getElementById('history-count').innerText = historyData.length;
         }
 
-        function stopPIPMode() {
-            if (window.AndroidInterface) window.AndroidInterface.stopFloatingService();
+        // Initialize Camera
+        html5QrCode.start({ facingMode: "environment" }, qrConfig, onScanSuccess)
+        .catch(err => {
+            console.error("Camera fail:", err);
+            document.getElementById('last-scan').innerText = "Camera Permission Error!";
+        });
+
+        // Bridge Logic
+        function triggerPIP() {
+            if (window.AndroidInterface) AndroidInterface.startFloatingService();
+            else alert("Available only inside the Android App.");
+        }
+
+        function exitPIP() {
+            if (window.AndroidInterface) AndroidInterface.stopFloatingService();
         }
     </script>
+
+    <style>
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </body>
 </html>
+
